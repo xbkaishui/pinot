@@ -15,6 +15,7 @@
  */
 package com.linkedin.pinot.controller.helix.core;
 
+import com.linkedin.pinot.core.realtime.impl.kafka.KafkaLowLevelStreamProviderConfig;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -212,9 +213,13 @@ public class PinotTableIdealStateBuilder {
     final int nPartitions = getPartitionsCount(kafkaMetadata);
     LOGGER.info("Assigning {} partitions to instances for simple consumer for table {}", nPartitions, realtimeTableName);
 
+    final KafkaLowLevelStreamProviderConfig kafkaLowLevelStreamProviderConfig = new KafkaLowLevelStreamProviderConfig();
+    kafkaLowLevelStreamProviderConfig.init(realtimeTableConfig, null, null);
+    int flushSize = kafkaLowLevelStreamProviderConfig.getSizeThresholdToFlushSegment();
+
     segmentManager.setupHelixEntries(topicName, realtimeTableName, nPartitions, realtimeInstances, nReplicas,
         kafkaMetadata.getKafkaConsumerProperties().get(Helix.DataSource.Realtime.Kafka.AUTO_OFFSET_RESET), kafkaMetadata.getBootstrapHosts(),
-        idealState, create);
+        idealState, create, flushSize);
   }
 
   private static int getPartitionsCount(KafkaStreamMetadata kafkaMetadata) {

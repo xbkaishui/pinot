@@ -16,6 +16,9 @@
 
 package com.linkedin.pinot.controller.helix.core.realtime;
 
+import com.google.common.collect.Maps;
+import com.linkedin.pinot.common.config.AbstractTableConfig;
+import com.linkedin.pinot.core.realtime.impl.kafka.KafkaLowLevelStreamProviderConfig;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -161,7 +164,7 @@ public class PinotLLCRealtimeSegmentManager {
    */
   public void setupHelixEntries(final String topicName, final String realtimeTableName, int nPartitions,
       final List<String> instanceNames, int nReplicas, String initialOffset, String bootstrapHosts, IdealState
-      idealState, boolean create) {
+      idealState, boolean create, int flushSize) {
     if (nReplicas > instanceNames.size()) {
       throw new RuntimeException("Replicas requested(" + nReplicas + ") cannot fit within number of instances(" +
           instanceNames.size() + ") for table " + realtimeTableName + " topic " + topicName);
@@ -202,7 +205,7 @@ public class PinotLLCRealtimeSegmentManager {
     }
     writeKafkaPartitionAssignemnt(realtimeTableName, znRecord);
     setupInitialSegments(realtimeTableName, znRecord, topicName, initialOffset, bootstrapHosts, idealState, create,
-        nReplicas);
+        nReplicas, flushSize);
   }
 
   // Remove all trace of LLC for this table.
@@ -261,7 +264,7 @@ public class PinotLLCRealtimeSegmentManager {
   }
 
   protected void setupInitialSegments(String realtimeTableName, ZNRecord partitionAssignment, String topicName, String
-      initialOffset, String bootstrapHosts, IdealState idealState, boolean create, int nReplicas) {
+      initialOffset, String bootstrapHosts, IdealState idealState, boolean create, int nReplicas, int flushSize) {
     List<String> currentSegments = getExistingSegments(realtimeTableName);
     // Make sure that there are no low-level segments existing.
     if (currentSegments != null) {
@@ -280,11 +283,12 @@ public class PinotLLCRealtimeSegmentManager {
 
     // Create one segment entry in PROPERTYSTORE for each kafka partition.
     // Any of these may already be there, so bail out clean if they are already present.
-    List<String> paths = new ArrayList<>(nPartitions);
-    List<ZNRecord> records = new ArrayList<>(nPartitions);
     final long now = System.currentTimeMillis();
     final int seqNum = STARTING_SEQUENCE_NUMBER;
 
+    List<LLCRealtimeSegmentZKMetadata> segmentZKMetadatas = new ArrayList<>();
+
+    // Create metadata for each segment
     for (int i = 0; i < nPartitions; i++) {
       final List<String> instances = partitionToServersMap.get(Integer.toString(i));
       LLCRealtimeSegmentZKMetadata metadata = new LLCRealtimeSegmentZKMetadata();
@@ -304,17 +308,61 @@ public class PinotLLCRealtimeSegmentManager {
       metadata.setSegmentName(segName);
       metadata.setStatus(CommonConstants.Segment.Realtime.Status.IN_PROGRESS);
 
-      ZNRecord record = metadata.toZNRecord();
-      final String znodePath = ZKMetadataProvider.constructPropertyStorePathForSegment(realtimeTableName, segName);
+      segmentZKMetadatas.add(metadata);
+      idealStateEntries.put(segName, instances);
+    }
+
+    // Compute the number of rows for each segment
+    for (LLCRealtimeSegmentZKMetadata segmentZKMetadata : segmentZKMetadatas) {
+      updateFlushThresholdForSegmentMetadata(segmentZKMetadata, partitionAssignment, flushSize);
+    }
+
+    // Write metadata for each segment to the Helix property store
+    List<String> paths = new ArrayList<>(nPartitions);
+    List<ZNRecord> records = new ArrayList<>(nPartitions);
+    for (LLCRealtimeSegmentZKMetadata segmentZKMetadata : segmentZKMetadatas) {
+      ZNRecord record = segmentZKMetadata.toZNRecord();
+      final String znodePath = ZKMetadataProvider.constructPropertyStorePathForSegment(realtimeTableName,
+          segmentZKMetadata.getSegmentName());
       paths.add(znodePath);
       records.add(record);
-      idealStateEntries.put(segName, instances);
     }
 
     writeSegmentsToPropertyStore(paths, records);
     LOGGER.info("Added {} segments to propertyStore for table {}", paths.size(), realtimeTableName);
 
     updateHelixIdealState(idealState, realtimeTableName, idealStateEntries, create, nReplicas);
+  }
+
+  void updateFlushThresholdForSegmentMetadata(LLCRealtimeSegmentZKMetadata segmentZKMetadata,
+      ZNRecord partitionAssignment, int tableFlushSize) {
+    // Gather list of instances for this partition
+    Map<String, Integer> segmentCountForInstance = new HashMap<>();
+    String segmentPartitionId = new LLCSegmentName(segmentZKMetadata.getSegmentName()).getPartitionRange();
+    for (String instanceName : partitionAssignment.getListField(segmentPartitionId)) {
+      segmentCountForInstance.put(instanceName, 0);
+    }
+
+    // Find the maximum number of partitions served for each instance that is serving this segment
+    int maxSegmentCountPerInstance = 1;
+    for (Map.Entry<String, List<String>> segmentAndInstanceList : partitionAssignment.getListFields().entrySet()) {
+      String segmentName = segmentAndInstanceList.getKey();
+      for (String instance : segmentAndInstanceList.getValue()) {
+        if (segmentCountForInstance.containsKey(instance)) {
+          int segmentCountForThisInstance = segmentCountForInstance.get(instance);
+          segmentCountForThisInstance++;
+          segmentCountForInstance.put(instance, segmentCountForThisInstance);
+
+          if (maxSegmentCountPerInstance < segmentCountForThisInstance) {
+            maxSegmentCountPerInstance = segmentCountForThisInstance;
+          }
+        }
+      }
+    }
+
+    // Configure the segment size flush limit based on the maximum number of partitions allocated to a replica
+    int segmentFlushSize = (int) (((float) tableFlushSize) / maxSegmentCountPerInstance);
+    segmentZKMetadata.setSizeThresholdToFlushSegment(segmentFlushSize);
   }
 
   // Update the helix idealstate when a new table is added.
@@ -455,8 +503,14 @@ public class PinotLLCRealtimeSegmentManager {
     final long newStartOffset = nextOffset;
     LLCSegmentName newHolder = new LLCSegmentName(oldSegmentName.getTableName(), partitionId, newSeqNum, now);
     final String newSegmentNameStr = newHolder.getSegmentName();
-    final ZNRecord newZnRecord =
+
+    ZNRecord newZnRecord =
         makeZnRecordForNewSegment(rawTableName, newInstances.size(), newStartOffset, newSegmentNameStr);
+    final LLCRealtimeSegmentZKMetadata newSegmentZKMetadata = new LLCRealtimeSegmentZKMetadata(newZnRecord);
+    updateFlushThresholdForSegmentMetadata(newSegmentZKMetadata, partitionAssignment,
+        getRealtimeTableFlushSizeForTable(rawTableName));
+    newZnRecord = newSegmentZKMetadata.toZNRecord();
+
     final String newZnodePath = ZKMetadataProvider.constructPropertyStorePathForSegment(realtimeTableName, newSegmentNameStr);
 
     List<String> paths = new ArrayList<>(2);
@@ -485,6 +539,13 @@ public class PinotLLCRealtimeSegmentManager {
 
     updateHelixIdealState(realtimeTableName, newInstances, committingSegmentNameStr, newSegmentNameStr);
     return true;
+  }
+
+  private int getRealtimeTableFlushSizeForTable(String tableName) {
+    AbstractTableConfig tableConfig = ZKMetadataProvider.getRealtimeTableConfig(_propertyStore, tableName);
+    KafkaLowLevelStreamProviderConfig streamProviderConfig = new KafkaLowLevelStreamProviderConfig();
+    streamProviderConfig.init(tableConfig, null, null);
+    return streamProviderConfig.getSizeThresholdToFlushSegment();
   }
 
   /**
@@ -669,7 +730,8 @@ public class PinotLLCRealtimeSegmentManager {
           long startOffset = getPartitionOffset(kafkaStreamMetadata, consumerStartOffsetSpec, curPartition);
           LOGGER.info("Found kafka offset {} for table {} for partition {}", startOffset, realtimeTableName, curPartition);
 
-          createSegment(realtimeTableName, nReplicas, curPartition, seqNum, instances, startOffset);
+          createSegment(realtimeTableName, nReplicas, curPartition, seqNum, instances, startOffset,
+              partitionAssignment);
         } else {
           // We hit the segment with the highest sequence number for 'curPartition'. Create a consuming segment.
           int nextSeqNum = segmentName.getSequenceNumber() + 1;
@@ -683,7 +745,8 @@ public class PinotLLCRealtimeSegmentManager {
             startOffset = oldSegMetadata.getEndOffset();
             LOGGER.info("Choosing newer kafka offset {} for table {} for partition {}", startOffset, realtimeTableName, curPartition);
           }
-          createSegment(realtimeTableName, nReplicas, curPartition, nextSeqNum, instances, startOffset);
+          createSegment(realtimeTableName, nReplicas, curPartition, nextSeqNum, instances, startOffset,
+              partitionAssignment);
           segmentIndex++;
         }
       } catch (Exception e) {
@@ -696,7 +759,7 @@ public class PinotLLCRealtimeSegmentManager {
   }
 
   private void createSegment(String realtimeTableName, int numReplicas, int partitionId, int seqNum,
-      List<String> serverInstances, long startOffset) {
+      List<String> serverInstances, long startOffset, ZNRecord partitionAssignment) {
     LOGGER.info("Attempting to auto-create a segment for partition {} of table {}", partitionId, realtimeTableName);
     final List<String> propStorePaths = new ArrayList<>(1);
     final List<ZNRecord> propStoreEntries = new ArrayList<>(1);
@@ -704,8 +767,14 @@ public class PinotLLCRealtimeSegmentManager {
     final String tableName = TableNameBuilder.extractRawTableName(realtimeTableName);
     LLCSegmentName newSegmentName = new LLCSegmentName(tableName, partitionId, seqNum, now);
     final String newSegmentNameStr = newSegmentName.getSegmentName();
-    final ZNRecord newZnRecord = makeZnRecordForNewSegment(realtimeTableName, numReplicas, startOffset,
+    ZNRecord newZnRecord = makeZnRecordForNewSegment(realtimeTableName, numReplicas, startOffset,
         newSegmentNameStr);
+
+    final LLCRealtimeSegmentZKMetadata newSegmentZKMetadata = new LLCRealtimeSegmentZKMetadata(newZnRecord);
+    updateFlushThresholdForSegmentMetadata(newSegmentZKMetadata, partitionAssignment,
+        getRealtimeTableFlushSizeForTable(realtimeTableName));
+    newZnRecord = newSegmentZKMetadata.toZNRecord();
+
     final String newZnodePath = ZKMetadataProvider
         .constructPropertyStorePathForSegment(realtimeTableName, newSegmentNameStr);
     propStorePaths.add(newZnodePath);
