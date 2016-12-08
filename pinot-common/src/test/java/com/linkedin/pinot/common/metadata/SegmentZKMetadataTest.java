@@ -77,6 +77,7 @@ public class SegmentZKMetadataTest {
     record.setLongField(CommonConstants.Segment.TOTAL_DOCS, 10000);
     record.setLongField(CommonConstants.Segment.CRC, 1234);
     record.setLongField(CommonConstants.Segment.CREATION_TIME, 3000);
+    record.setIntField(CommonConstants.Segment.FLUSH_THRESHOLD_SIZE, 1234);
     return record;
   }
 
@@ -93,6 +94,7 @@ public class SegmentZKMetadataTest {
     realtimeSegmentMetadata.setTotalRawDocs(10000);
     realtimeSegmentMetadata.setCrc(1234);
     realtimeSegmentMetadata.setCreationTime(3000);
+    realtimeSegmentMetadata.setSizeThresholdToFlushSegment(1234);
     return realtimeSegmentMetadata;
   }
 
@@ -110,6 +112,7 @@ public class SegmentZKMetadataTest {
     record.setLongField(CommonConstants.Segment.TOTAL_DOCS, -1);
     record.setLongField(CommonConstants.Segment.CRC, -1);
     record.setLongField(CommonConstants.Segment.CREATION_TIME, 1000);
+    record.setIntField(CommonConstants.Segment.FLUSH_THRESHOLD_SIZE, 1234);
     return record;
   }
 
@@ -126,6 +129,7 @@ public class SegmentZKMetadataTest {
     realtimeSegmentMetadata.setTotalRawDocs(-1);
     realtimeSegmentMetadata.setCrc(-1);
     realtimeSegmentMetadata.setCreationTime(1000);
+    realtimeSegmentMetadata.setSizeThresholdToFlushSegment(1234);
     return realtimeSegmentMetadata;
   }
 
@@ -145,6 +149,7 @@ public class SegmentZKMetadataTest {
     record.setSimpleField(CommonConstants.Segment.Offline.DOWNLOAD_URL, "http://localhost:8000/testTable_O_3000_4000");
     record.setLongField(CommonConstants.Segment.Offline.PUSH_TIME, 4000);
     record.setLongField(CommonConstants.Segment.Offline.REFRESH_TIME, 8000);
+    record.setIntField(CommonConstants.Segment.FLUSH_THRESHOLD_SIZE, 1234);
     return record;
   }
 
@@ -163,6 +168,7 @@ public class SegmentZKMetadataTest {
     offlineSegmentMetadata.setDownloadUrl("http://localhost:8000/testTable_O_3000_4000");
     offlineSegmentMetadata.setPushTime(4000);
     offlineSegmentMetadata.setRefreshTime(8000);
+    offlineSegmentMetadata.setSizeThresholdToFlushSegment(1234);
     return offlineSegmentMetadata;
   }
 }
