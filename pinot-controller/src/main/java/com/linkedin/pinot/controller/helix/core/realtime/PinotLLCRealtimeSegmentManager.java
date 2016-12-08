@@ -541,7 +541,7 @@ public class PinotLLCRealtimeSegmentManager {
     return true;
   }
 
-  private int getRealtimeTableFlushSizeForTable(String tableName) {
+  protected int getRealtimeTableFlushSizeForTable(String tableName) {
     AbstractTableConfig tableConfig = ZKMetadataProvider.getRealtimeTableConfig(_propertyStore, tableName);
     KafkaLowLevelStreamProviderConfig streamProviderConfig = new KafkaLowLevelStreamProviderConfig();
     streamProviderConfig.init(tableConfig, null, null);

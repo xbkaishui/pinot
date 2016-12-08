@@ -16,7 +16,6 @@
 
 package com.linkedin.pinot.controller.helix.core.realtime;
 
-import com.google.common.collect.Lists;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -643,9 +642,18 @@ public class PinotLLCRealtimeSegmentManagerTest {
     }
 
     @Override
+    protected int getRealtimeTableFlushSizeForTable(String tableName) {
+      return 1000;
+    }
+
+    @Override
     protected IdealState getTableIdealState(String realtimeTableName) {
       return _tableIdealState;
     }
+  }
+
+  private String makeFakeSegmentName(int id) {
+    return new LLCSegmentName("fakeTable_REALTIME", id, 0, 1234L).getSegmentName();
   }
 
   @Test
@@ -654,7 +662,7 @@ public class PinotLLCRealtimeSegmentManagerTest {
         Collections.<String>emptyList());
 
     ZNRecord partitionAssignment = new ZNRecord("fakeTable_REALTIME");
-    // 4 segments assigned to 4 servers, 4 replicas => the segments should have 250k rows each (1M / 4)
+    // 4 partitions assigned to 4 servers, 4 replicas => the segments should have 250k rows each (1M / 4)
     for(int segmentId = 1; segmentId <= 4; ++segmentId) {
       List<String> instances = new ArrayList<>();
 
@@ -662,18 +670,18 @@ public class PinotLLCRealtimeSegmentManagerTest {
         instances.add("Server_1.2.3.4_123" + replicaId);
       }
 
-      partitionAssignment.setListField("segment_" + segmentId, instances);
+      partitionAssignment.setListField(Integer.toString(segmentId), instances);
     }
 
     // Check that each segment has 250k rows each
     for(int segmentId = 1; segmentId <= 4; ++segmentId) {
       LLCRealtimeSegmentZKMetadata metadata = new LLCRealtimeSegmentZKMetadata();
-      metadata.setSegmentName("segment_" + segmentId);
+      metadata.setSegmentName(makeFakeSegmentName(segmentId));
       realtimeSegmentManager.updateFlushThresholdForSegmentMetadata(metadata, partitionAssignment, 1000000);
       Assert.assertEquals(metadata.getSizeThresholdToFlushSegment(), 250000);
     }
 
-    // 4 segments assigned to 4 servers, 2 segments/server => the segments should have 500k rows each (1M / 2)
+    // 4 partitions assigned to 4 servers, 2 partitions/server => the segments should have 500k rows each (1M / 2)
     partitionAssignment.getListFields().clear();
     for(int segmentId = 1; segmentId <= 4; ++segmentId) {
       List<String> instances = new ArrayList<>();
@@ -682,44 +690,44 @@ public class PinotLLCRealtimeSegmentManagerTest {
         instances.add("Server_1.2.3.4_123" + ((replicaId + segmentId) % 4));
       }
 
-      partitionAssignment.setListField("segment_" + segmentId, instances);
+      partitionAssignment.setListField(Integer.toString(segmentId), instances);
     }
 
     // Check that each segment has 500k rows each
     for(int segmentId = 1; segmentId <= 4; ++segmentId) {
       LLCRealtimeSegmentZKMetadata metadata = new LLCRealtimeSegmentZKMetadata();
-      metadata.setSegmentName("segment_" + segmentId);
+      metadata.setSegmentName(makeFakeSegmentName(segmentId));
       realtimeSegmentManager.updateFlushThresholdForSegmentMetadata(metadata, partitionAssignment, 1000000);
       Assert.assertEquals(metadata.getSizeThresholdToFlushSegment(), 500000);
     }
 
-    // 4 segments assigned to 4 servers, 1 segment/server => the segments should have 1M rows each (1M / 1)
+    // 4 partitions assigned to 4 servers, 1 partition/server => the segments should have 1M rows each (1M / 1)
     partitionAssignment.getListFields().clear();
     for(int segmentId = 1; segmentId <= 4; ++segmentId) {
       List<String> instances = new ArrayList<>();
       instances.add("Server_1.2.3.4_123" + segmentId);
-      partitionAssignment.setListField("segment_" + segmentId, instances);
+      partitionAssignment.setListField(Integer.toString(segmentId), instances);
     }
 
     // Check that each segment has 1M rows each
     for(int segmentId = 1; segmentId <= 4; ++segmentId) {
       LLCRealtimeSegmentZKMetadata metadata = new LLCRealtimeSegmentZKMetadata();
-      metadata.setSegmentName("segment_" + segmentId);
+      metadata.setSegmentName(makeFakeSegmentName(segmentId));
       realtimeSegmentManager.updateFlushThresholdForSegmentMetadata(metadata, partitionAssignment, 1000000);
       Assert.assertEquals(metadata.getSizeThresholdToFlushSegment(), 1000000);
     }
 
-    // Assign another segment to all servers => the servers should have 500k rows each (1M / 2)
+    // Assign another partition to all servers => the servers should have 500k rows each (1M / 2)
     List<String> instances = new ArrayList<>();
     for(int replicaId = 1; replicaId <= 4; ++replicaId) {
       instances.add("Server_1.2.3.4_123" + replicaId);
     }
-    partitionAssignment.setListField("segment_5", instances);
+    partitionAssignment.setListField("5", instances);
 
     // Check that each segment has 500k rows each
     for(int segmentId = 1; segmentId <= 4; ++segmentId) {
       LLCRealtimeSegmentZKMetadata metadata = new LLCRealtimeSegmentZKMetadata();
-      metadata.setSegmentName("segment_" + segmentId);
+      metadata.setSegmentName(makeFakeSegmentName(segmentId));
       realtimeSegmentManager.updateFlushThresholdForSegmentMetadata(metadata, partitionAssignment, 1000000);
       Assert.assertEquals(metadata.getSizeThresholdToFlushSegment(), 500000);
     }
