@@ -45,7 +45,6 @@ public abstract class SegmentZKMetadata implements ZKMetadata {
   private long _totalRawDocs = -1;
   private long _crc = -1;
   private long _creationTime = -1;
-  private int _sizeThresholdToFlushSegment = -1;
 
   public SegmentZKMetadata() {
   }
@@ -64,7 +63,6 @@ public abstract class SegmentZKMetadata implements ZKMetadata {
     _totalRawDocs = znRecord.getLongField(CommonConstants.Segment.TOTAL_DOCS, -1);
     _crc = znRecord.getLongField(CommonConstants.Segment.CRC, -1);
     _creationTime = znRecord.getLongField(CommonConstants.Segment.CREATION_TIME, -1);
-    _sizeThresholdToFlushSegment = znRecord.getIntField(CommonConstants.Segment.FLUSH_THRESHOLD_SIZE, -1);
   }
 
   public String getSegmentName() {
@@ -147,14 +145,6 @@ public abstract class SegmentZKMetadata implements ZKMetadata {
     _creationTime = creationTime;
   }
 
-  public void setSizeThresholdToFlushSegment(int sizeThresholdToFlushSegment) {
-    _sizeThresholdToFlushSegment = sizeThresholdToFlushSegment;
-  }
-
-  public int getSizeThresholdToFlushSegment() {
-    return _sizeThresholdToFlushSegment;
-  }
-
   @Override
   public boolean equals(Object segmentMetadata) {
     if (isSameReference(this, segmentMetadata)) {
@@ -175,8 +165,7 @@ public abstract class SegmentZKMetadata implements ZKMetadata {
         isEqual(_segmentType, metadata._segmentType) &&
         isEqual(_totalRawDocs, metadata._totalRawDocs) &&
         isEqual(_crc, metadata._crc) &&
-        isEqual(_creationTime, metadata._creationTime) &&
-        isEqual(_sizeThresholdToFlushSegment, metadata._sizeThresholdToFlushSegment);
+        isEqual(_creationTime, metadata._creationTime);
   }
 
   @Override
@@ -191,7 +180,6 @@ public abstract class SegmentZKMetadata implements ZKMetadata {
     result = hashCodeOf(result, _totalRawDocs);
     result = hashCodeOf(result, _crc);
     result = hashCodeOf(result, _creationTime);
-    result = hashCodeOf(result, _sizeThresholdToFlushSegment);
     return result;
   }
 
@@ -213,7 +201,6 @@ public abstract class SegmentZKMetadata implements ZKMetadata {
     znRecord.setLongField(CommonConstants.Segment.TOTAL_DOCS, _totalRawDocs);
     znRecord.setLongField(CommonConstants.Segment.CRC, _crc);
     znRecord.setLongField(CommonConstants.Segment.CREATION_TIME, _creationTime);
-    znRecord.setLongField(CommonConstants.Segment.FLUSH_THRESHOLD_SIZE, _sizeThresholdToFlushSegment);
     return znRecord;
   }
 
@@ -234,7 +221,6 @@ public abstract class SegmentZKMetadata implements ZKMetadata {
     configMap.put(CommonConstants.Segment.TOTAL_DOCS, Long.toString(_totalRawDocs));
     configMap.put(CommonConstants.Segment.CRC, Long.toString(_crc));
     configMap.put(CommonConstants.Segment.CREATION_TIME, Long.toString(_creationTime));
-    configMap.put(CommonConstants.Segment.FLUSH_THRESHOLD_SIZE, Integer.toString(_sizeThresholdToFlushSegment));
     return configMap;
   }
 }

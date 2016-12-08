@@ -32,6 +32,7 @@ public class OfflineSegmentZKMetadata extends SegmentZKMetadata {
   private String _downloadUrl = null;
   private long _pushTime = Long.MIN_VALUE;
   private long _refreshTime = Long.MIN_VALUE;
+  private int _sizeThresholdToFlushSegment = -1;
 
   public OfflineSegmentZKMetadata() {
     setSegmentType(SegmentType.OFFLINE);

@@ -19,6 +19,8 @@ package com.linkedin.pinot.controller.helix.core.realtime;
 import com.google.common.collect.Maps;
 import com.linkedin.pinot.common.config.AbstractTableConfig;
 import com.linkedin.pinot.core.realtime.impl.kafka.KafkaLowLevelStreamProviderConfig;
+import it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -337,31 +339,30 @@ public class PinotLLCRealtimeSegmentManager {
   void updateFlushThresholdForSegmentMetadata(LLCRealtimeSegmentZKMetadata segmentZKMetadata,
       ZNRecord partitionAssignment, int tableFlushSize) {
     // Gather list of instances for this partition
-    Map<String, Integer> segmentCountForInstance = new HashMap<>();
+    Object2IntMap<String> partitionCountForInstance = new Object2IntLinkedOpenHashMap<>();
     String segmentPartitionId = new LLCSegmentName(segmentZKMetadata.getSegmentName()).getPartitionRange();
     for (String instanceName : partitionAssignment.getListField(segmentPartitionId)) {
-      segmentCountForInstance.put(instanceName, 0);
+      partitionCountForInstance.put(instanceName, 0);
     }
 
     // Find the maximum number of partitions served for each instance that is serving this segment
-    int maxSegmentCountPerInstance = 1;
-    for (Map.Entry<String, List<String>> segmentAndInstanceList : partitionAssignment.getListFields().entrySet()) {
-      String segmentName = segmentAndInstanceList.getKey();
-      for (String instance : segmentAndInstanceList.getValue()) {
-        if (segmentCountForInstance.containsKey(instance)) {
-          int segmentCountForThisInstance = segmentCountForInstance.get(instance);
-          segmentCountForThisInstance++;
-          segmentCountForInstance.put(instance, segmentCountForThisInstance);
+    int maxPartitionCountPerInstance = 1;
+    for (Map.Entry<String, List<String>> partitionAndInstanceList : partitionAssignment.getListFields().entrySet()) {
+      for (String instance : partitionAndInstanceList.getValue()) {
+        if (partitionCountForInstance.containsKey(instance)) {
+          int partitionCountForThisInstance = partitionCountForInstance.getInt(instance);
+          partitionCountForThisInstance++;
+          partitionCountForInstance.put(instance, partitionCountForThisInstance);
 
-          if (maxSegmentCountPerInstance < segmentCountForThisInstance) {
-            maxSegmentCountPerInstance = segmentCountForThisInstance;
+          if (maxPartitionCountPerInstance < partitionCountForThisInstance) {
+            maxPartitionCountPerInstance = partitionCountForThisInstance;
           }
         }
       }
     }
 
     // Configure the segment size flush limit based on the maximum number of partitions allocated to a replica
-    int segmentFlushSize = (int) (((float) tableFlushSize) / maxSegmentCountPerInstance);
+    int segmentFlushSize = (int) (((float) tableFlushSize) / maxPartitionCountPerInstance);
     segmentZKMetadata.setSizeThresholdToFlushSegment(segmentFlushSize);
   }
 
