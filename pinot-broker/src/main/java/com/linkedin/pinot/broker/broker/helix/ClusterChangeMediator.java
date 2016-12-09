@@ -40,7 +40,6 @@ import org.slf4j.LoggerFactory;
 public class ClusterChangeMediator implements LiveInstanceChangeListener, ExternalViewChangeListener, InstanceConfigChangeListener {
   private static final Logger LOGGER = LoggerFactory.getLogger(ClusterChangeMediator.class);
   private final HelixExternalViewBasedRouting _helixExternalViewBasedRouting;
-  private static final long MAX_TIME_BEFORE_IMMEDIATE_UPDATE_MILLIS = 30000L;
 
   private enum UpdateType {
     EXTERNAL_VIEW,
