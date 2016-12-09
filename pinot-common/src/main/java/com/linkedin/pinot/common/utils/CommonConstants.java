@@ -95,6 +95,8 @@ public class CommonConstants {
         public static final String REALTIME_SEGMENT_FLUSH_TIME = "realtime.segment.flush.threshold.time";
         // Num records threshold in the realtime segment
         public static final String REALTIME_SEGMENT_FLUSH_SIZE = "realtime.segment.flush.threshold.size";
+        // Flush threshold size across all segments
+        public static final String REALTIME_GLOBAL_SEGMENT_FLUSH_SIZE = "realtime.global.segment.flush.threshold.size";
 
         public static enum StreamType {
           kafka

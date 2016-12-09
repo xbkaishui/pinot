@@ -338,6 +338,11 @@ public class PinotLLCRealtimeSegmentManager {
 
   void updateFlushThresholdForSegmentMetadata(LLCRealtimeSegmentZKMetadata segmentZKMetadata,
       ZNRecord partitionAssignment, int tableFlushSize) {
+    // Only update the flush threshold if there is a valid table flush size
+    if (tableFlushSize < 1) {
+      return;
+    }
+
     // Gather list of instances for this partition
     Object2IntMap<String> partitionCountForInstance = new Object2IntLinkedOpenHashMap<>();
     String segmentPartitionId = new LLCSegmentName(segmentZKMetadata.getSegmentName()).getPartitionRange();
@@ -544,9 +549,24 @@ public class PinotLLCRealtimeSegmentManager {
 
   protected int getRealtimeTableFlushSizeForTable(String tableName) {
     AbstractTableConfig tableConfig = ZKMetadataProvider.getRealtimeTableConfig(_propertyStore, tableName);
-    KafkaLowLevelStreamProviderConfig streamProviderConfig = new KafkaLowLevelStreamProviderConfig();
-    streamProviderConfig.init(tableConfig, null, null);
-    return streamProviderConfig.getSizeThresholdToFlushSegment();
+    return getRealtimeTableFlushSize(tableConfig);
+  }
+
+  public static int getRealtimeTableFlushSize(AbstractTableConfig tableConfig) {
+    final Map<String, String> streamConfigs = tableConfig.getIndexingConfig().getStreamConfigs();
+    if (streamConfigs != null && streamConfigs.containsKey(
+        CommonConstants.Helix.DataSource.Realtime.REALTIME_GLOBAL_SEGMENT_FLUSH_SIZE)) {
+      final String flushSizeStr =
+          streamConfigs.get(CommonConstants.Helix.DataSource.Realtime.REALTIME_GLOBAL_SEGMENT_FLUSH_SIZE);
+      try {
+        return Integer.parseInt(flushSizeStr);
+      } catch (Exception e) {
+        LOGGER.warn("Failed to parse flush size of {}", flushSizeStr, e);
+        return -1;
+      }
+    }
+
+    return -1;
   }
 
   /**
