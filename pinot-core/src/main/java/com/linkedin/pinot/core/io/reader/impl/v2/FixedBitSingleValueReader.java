@@ -168,41 +168,6 @@ public class FixedBitSingleValueReader extends BaseSingleColumnSingleValueReader
   }
 
   @Override
-  public char getChar(int row) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public short getShort(int row) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public long getLong(int row) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public float getFloat(int row) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public double getDouble(int row) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public String getString(int row) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public byte[] getBytes(int row) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public void readValues(int[] rows, int rowStartPos, int rowSize, int[] values, int valuesStartPos) {
     int endPos = rowStartPos + rowSize;
     for (int ri = rowStartPos; ri < endPos; ++ri) {

@@ -32,7 +32,7 @@ public class StringColumnPreIndexStatsCollector extends AbstractColumnStatistics
 
   private String min = V1Constants.Str.NULL_STRING;
   private String max = V1Constants.Str.NULL_STRING;
-  private final int longestStringLength = 0;
+  private int longestStringLength = 0;
   private final ObjectSet<String> rawStringSet;
   private final ObjectSet<String> aggregatedStringSet;
   private String[] sortedStringList;
@@ -58,7 +58,9 @@ public class StringColumnPreIndexStatsCollector extends AbstractColumnStatistics
 
     if (entry instanceof Object[]) {
       for (final Object e : (Object[]) entry) {
-        set.add(e.toString());
+        String value = e.toString();
+        set.add(value);
+        longestStringLength = Math.max(longestStringLength, value.getBytes().length);
       }
       if (maxNumberOfMultiValues < ((Object[]) entry).length) {
         maxNumberOfMultiValues = ((Object[]) entry).length;
@@ -74,6 +76,7 @@ public class StringColumnPreIndexStatsCollector extends AbstractColumnStatistics
       }
       addressSorted(value);
       set.add(value);
+      longestStringLength = Math.max(longestStringLength, value.getBytes().length);
       totalNumberOfEntries++;
     }
   }
